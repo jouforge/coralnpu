@@ -102,3 +102,5 @@ On 2026-11-24, both JTAG transfers on `qfpga0` reported DONE. AMC 3.1.0
 reached READY and QDMA queue 4 returned online in both directions. The host
 ran all three workloads twice through PF1 BAR2 at `0000:41:00.1`. All six
 result comparisons passed.
+
+For character-level Transformer inference, see the [language model guide](lm/README.md).

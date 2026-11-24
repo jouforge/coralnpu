@@ -1,6 +1,8 @@
 import argparse
 import asyncio
+from contextlib import contextmanager
 import ctypes
+import fcntl
 import mmap
 import os
 from pathlib import Path
@@ -63,9 +65,7 @@ class Board:
                 name: table.get_symbol_by_name(name)[0]["st_value"]
                 for name in symbols
             }
-            self.put_word(CSR, 1)
-            if self.word(CSR) != 1:
-                raise RuntimeError("Core reset did not assert")
+            self.reset_core()
             for segment in elf.iter_segments("PT_LOAD"):
                 data = segment.data()
                 size = segment["p_memsz"]
@@ -92,10 +92,16 @@ class Board:
         words = [self.word(addr + i) for i in range(0, size, 4)]
         return np.asarray(words, dtype="<u4").view(np.uint8)
 
+    def reset_core(self):
+        self.put_word(CSR, 1)
+        if self.word(CSR) != 1:
+            raise RuntimeError("Core reset did not assert")
+
     def fault(self):
         return bool(self.word(CSR + 8) & 2)
 
     async def run_to_halt(self, timeout_cycles):
+        self.reset_core()
         self.put_word(CSR + 4, self.entry)
         if self.word(CSR + 4) != self.entry or self.word(CSR + 8) & 3:
             raise RuntimeError("Core did not reach its reset state")
@@ -122,19 +128,26 @@ async def run(board, directory):
             print(f"PASS {repetition + 1} {check.__name__}", flush=True)
 
 
+@contextmanager
+def open_board(bdf, timeout):
+    device = Path("/sys/bus/pci/devices") / bdf
+    if device.joinpath("device").read_text().strip(
+    ) != "0x50b5" or device.joinpath("vendor").read_text().strip() != "0x10ee":
+        raise SystemExit("Expected the Alveo V80 user PCI function")
+    fd = os.open(device / "resource2", os.O_RDWR | os.O_SYNC)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with mmap.mmap(fd, 0x41000, offset=BAR_OFFSET) as window:
+            yield Board(window, timeout)
+    finally:
+        os.close(fd)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", required=True, help="PF1 PCI BDF")
     parser.add_argument("--elf-dir", required=True, type=Path)
     parser.add_argument("--timeout", type=float, default=3)
     args = parser.parse_args()
-    device = Path("/sys/bus/pci/devices") / args.device
-    if device.joinpath("device").read_text().strip(
-    ) != "0x50b5" or device.joinpath("vendor").read_text().strip() != "0x10ee":
-        raise SystemExit("Expected the Alveo V80 user PCI function")
-    fd = os.open(device / "resource2", os.O_RDWR | os.O_SYNC)
-    try:
-        with mmap.mmap(fd, 0x41000, offset=BAR_OFFSET) as window:
-            asyncio.run(run(Board(window, args.timeout), args.elf_dir))
-    finally:
-        os.close(fd)
+    with open_board(args.device, args.timeout) as board:
+        asyncio.run(run(board, args.elf_dir))

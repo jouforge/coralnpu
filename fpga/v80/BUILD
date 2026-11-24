@@ -46,3 +46,21 @@ coralflow_test(
         "@bazel_tools//tools/python/runfiles",
     ],
 )
+
+coralflow_test(
+    name = "lm_check",
+    size = "large",
+    srcs = ["lm_check.py"],
+    data = [
+        "//fpga/v80/lm:decoder.elf",
+        "//fpga/v80/lm:stories.bin",
+    ],
+    hdl_toplevel = "VmeCoreMiniAxi",
+    targets = ["verilator"],
+    testcases = ["generation"],
+    verilator_model = ":v80_core_model",
+    deps = [
+        "//fpga/v80/lm:inference",
+        "@bazel_tools//tools/python/runfiles",
+    ],
+)
