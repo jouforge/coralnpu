@@ -119,6 +119,7 @@ coralnpu_v2_binary(
     name = "vme_matmul_test",
     srcs = ["vme_matmul_test.cc"],
     hdrs = ["vme_test_utils.h"],
+    visibility = ["//fpga/v80:__pkg__"],
 )
 
 coralnpu_v2_binary(

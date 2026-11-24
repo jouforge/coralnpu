@@ -63,8 +63,13 @@ module ClockGate (
 
 `elsif FPGA_XILINX
   // Xilinx FPGA Specific ClockGate
+`ifdef FPGA_VERSAL_HBM
+  localparam string SimDevice = "VERSAL_HBM";
+`else
+  localparam string SimDevice = "ULTRASCALE_PLUS";
+`endif
   BUFGCE #(
-      .SIM_DEVICE("ULTRASCALE_PLUS")
+      .SIM_DEVICE(SimDevice)
   ) u_bufgce (
       .I (clk_i),
       .CE(enable | te),
